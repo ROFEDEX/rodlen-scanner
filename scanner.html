@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RODLEN Barcode Scanner</title>
+<style>
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+         background:#111827; color:#fff; text-align:center; padding:20px 16px; }
+  h2 { font-size:16px; margin:0 0 14px; }
+  #reader { width:100%; max-width:360px; margin:0 auto; border-radius:12px; overflow:hidden; }
+  #status { margin-top:14px; font-size:13px; color:#9ca3af; min-height:18px; }
+  #manualWrap { margin-top:22px; }
+  #manualWrap label { display:block; font-size:12px; color:#9ca3af; margin-bottom:6px; }
+  input { width:80%; max-width:280px; padding:11px; border-radius:8px; border:none; font-size:14px; }
+  button { margin-top:12px; padding:11px 22px; border-radius:8px; border:none;
+           background:#4f46e5; color:#fff; font-weight:600; font-size:14px; }
+</style>
+</head>
+<body>
+  <h2>Scan a barcode for RODLEN</h2>
+  <div id="reader"></div>
+  <div id="status">Starting camera…</div>
+  <div id="manualWrap">
+    <label>Or type it manually</label>
+    <input type="text" id="manual" placeholder="Barcode number"
+           onkeydown="if(event.key==='Enter'){event.preventDefault();sendCode(document.getElementById('manual').value);}">
+    <br>
+    <button onclick="sendCode(document.getElementById('manual').value)">Send to RODLEN</button>
+  </div>
+
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script>
+    function sendCode(code){
+      code = String(code||"").trim();
+      if (!code) return;
+      if (window.opener){
+        window.opener.postMessage({ type:"rodlen-barcode-scan", code:code }, "*");
+        document.getElementById('status').textContent = "Sent \"" + code + "\" — closing…";
+        setTimeout(function(){ window.close(); }, 600);
+      } else {
+        document.getElementById('status').textContent =
+          "Scanned \"" + code + "\" but this wasn't opened from RODLEN, so it can't send it back. Copy it manually.";
+      }
+    }
+
+    var scanner = new Html5Qrcode("reader");
+    scanner.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 250, height: 150 } },
+      function(decodedText){ scanner.stop().catch(function(){}); sendCode(decodedText); },
+      function(){ /* ignore per-frame scan misses */ }
+    ).then(function(){
+      document.getElementById('status').textContent = "Point the camera at the barcode…";
+    }).catch(function(err){
+      document.getElementById('status').textContent =
+        "Camera blocked here too: " + err + ". Type the barcode above instead.";
+    });
+  </script>
+</body>
+</html>
