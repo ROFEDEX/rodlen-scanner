@@ -5,28 +5,76 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RODLEN Barcode Scanner</title>
 <style>
+  * { box-sizing: border-box; }
   body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-         background:#111827; color:#fff; text-align:center; padding:20px 16px; }
-  h2 { font-size:16px; margin:0 0 14px; }
-  #reader { width:100%; max-width:360px; margin:0 auto; border-radius:12px; overflow:hidden; }
-  #status { margin-top:14px; font-size:13px; color:#9ca3af; min-height:18px; }
-  #manualWrap { margin-top:22px; }
-  #manualWrap label { display:block; font-size:12px; color:#9ca3af; margin-bottom:6px; }
+         background:#0f172a; color:#fff; text-align:center; padding:24px 16px; min-height:100vh; }
+  h2 { font-size:17px; margin:0 0 20px; font-weight:700; }
+
+  #startBtn { padding:16px 32px; border-radius:14px; border:none;
+    background:#4f46e5; color:#fff; font-weight:700; font-size:16px; }
+  #startBtn:disabled { opacity:.6; }
+
+  #reader { width:100%; max-width:360px; margin:16px auto 0; border-radius:14px; overflow:hidden; display:none; }
+
+  #steps { max-width:340px; margin:20px auto 0; text-align:left; display:none; }
+  .step { padding:10px 14px; border-radius:10px; background:#1e293b; margin-bottom:8px;
+          font-size:13.5px; color:#94a3b8; display:flex; align-items:center; gap:8px;
+          opacity:0; transform:translateY(4px); transition:opacity .25s, transform .25s; }
+  .step.show { opacity:1; transform:translateY(0); }
+  .step.active { color:#fff; background:#312e81; }
+  .step.done { color:#86efac; }
+  .step .dot { width:8px; height:8px; border-radius:50%; background:#475569; flex-shrink:0; }
+  .step.active .dot { background:#818cf8; }
+  .step.done .dot { background:#22c55e; }
+
+  #deniedPanel { display:none; max-width:340px; margin:20px auto 0; background:#1e293b;
+                 border-radius:14px; padding:18px; text-align:left; }
+  #deniedPanel .title { color:#f87171; font-weight:700; font-size:14.5px; margin-bottom:6px;
+                         display:flex; align-items:center; gap:8px; }
+  #deniedMsg { font-size:12px; color:#94a3b8; margin-bottom:14px; }
+  #deniedPanel button { display:block; width:100%; padding:12px; border-radius:10px; border:none;
+                         font-weight:700; font-size:14px; margin-bottom:8px; }
+  #deniedPanel .allow { background:#4f46e5; color:#fff; }
+  #deniedPanel .retry { background:#334155; color:#fff; }
+  #deniedPanel .manual-btn { background:transparent; color:#94a3b8; border:1px solid #334155; margin-bottom:0; }
+
+  #manualWrap { margin-top:26px; }
+  #manualWrap label { display:block; font-size:12px; color:#94a3b8; margin-bottom:6px; }
   input { width:80%; max-width:280px; padding:11px; border-radius:8px; border:none; font-size:14px; }
-  button { margin-top:12px; padding:11px 22px; border-radius:8px; border:none;
+  button.send { margin-top:12px; padding:11px 22px; border-radius:8px; border:none;
            background:#4f46e5; color:#fff; font-weight:600; font-size:14px; }
 </style>
 </head>
 <body>
-  <h2>Scan a barcode for RODLEN</h2>
+  <h2 id="heading">Scan a barcode for RODLEN</h2>
+
+  <button id="startBtn" onclick="startCamera()">📷 Start Camera</button>
+
+  <div id="steps">
+    <div class="step" id="step-perm"><span class="dot"></span><span>Checking permission…</span></div>
+    <div class="step" id="step-granted"><span class="dot"></span><span>Permission granted</span></div>
+    <div class="step" id="step-look"><span class="dot"></span><span>Looking for cameras…</span></div>
+    <div class="step" id="step-found"><span class="dot"></span><span id="step-found-text">Camera found</span></div>
+    <div class="step" id="step-init"><span class="dot"></span><span>Starting scanner…</span></div>
+    <div class="step" id="step-scan"><span class="dot"></span><span>Scanning…</span></div>
+  </div>
+
   <div id="reader"></div>
-  <div id="status">Starting camera…</div>
+
+  <div id="deniedPanel">
+    <div class="title">✕ Camera permission required</div>
+    <div id="deniedMsg"></div>
+    <button class="allow" onclick="startCamera()">Allow Camera</button>
+    <button class="retry" onclick="startCamera()">Retry</button>
+    <button class="manual-btn" onclick="document.getElementById('manual').focus()">Use Manual Barcode</button>
+  </div>
+
   <div id="manualWrap">
     <label>Or type it manually</label>
     <input type="text" id="manual" placeholder="Barcode number"
            onkeydown="if(event.key==='Enter'){event.preventDefault();sendCode(document.getElementById('manual').value);}">
     <br>
-    <button onclick="sendCode(document.getElementById('manual').value)">Send to RODLEN</button>
+    <button class="send" onclick="sendCode(document.getElementById('manual').value)">Send to RODLEN</button>
   </div>
 
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
@@ -34,28 +82,96 @@
     function sendCode(code){
       code = String(code||"").trim();
       if (!code) return;
+      document.getElementById('steps').style.display = 'none';
+      document.getElementById('deniedPanel').style.display = 'none';
+      document.getElementById('startBtn').style.display = 'none';
       if (window.opener){
         window.opener.postMessage({ type:"rodlen-barcode-scan", code:code }, "*");
-        document.getElementById('status').textContent = "Sent \"" + code + "\" — closing…";
+        document.getElementById('heading').textContent = "Sent \"" + code + "\" — closing…";
         setTimeout(function(){ window.close(); }, 600);
       } else {
-        document.getElementById('status').textContent =
+        document.getElementById('heading').textContent =
           "Scanned \"" + code + "\" but this wasn't opened from RODLEN, so it can't send it back. Copy it manually.";
       }
     }
 
-    var scanner = new Html5Qrcode("reader");
-    scanner.start(
-      { facingMode: "environment" },
-      { fps: 10, qrbox: { width: 250, height: 150 } },
-      function(decodedText){ scanner.stop().catch(function(){}); sendCode(decodedText); },
-      function(){ /* ignore per-frame scan misses */ }
-    ).then(function(){
-      document.getElementById('status').textContent = "Point the camera at the barcode…";
-    }).catch(function(err){
-      document.getElementById('status').textContent =
-        "Camera blocked here too: " + err + ". Type the barcode above instead.";
-    });
+    function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+    function setStep(id, state){
+      var el = document.getElementById(id);
+      el.classList.add('show');
+      el.classList.remove('active','done');
+      if (state) el.classList.add(state);
+    }
+    function showDenied(msg){
+      document.getElementById('reader').style.display = 'none';
+      document.getElementById('steps').style.display = 'none';
+      document.getElementById('startBtn').style.display = 'none';
+      document.getElementById('deniedMsg').textContent = msg || "";
+      document.getElementById('deniedPanel').style.display = 'block';
+    }
+
+    var scanner = null;
+    var starting = false;
+
+    async function startCamera(){
+      if (starting) return;
+      starting = true;
+
+      document.getElementById('startBtn').style.display = 'none';
+      document.getElementById('deniedPanel').style.display = 'none';
+      var stepsEl = document.getElementById('steps');
+      stepsEl.style.display = 'block';
+      ['step-perm','step-granted','step-look','step-found','step-init','step-scan'].forEach(function(id){
+        document.getElementById(id).classList.remove('show','active','done');
+      });
+
+      if (typeof Html5Qrcode === "undefined"){
+        showDenied("Scanner library didn't load — check your connection and retry, or type the barcode below.");
+        starting = false;
+        return;
+      }
+
+      try {
+        setStep('step-perm','active');
+        await sleep(300);
+        var cameras = await Html5Qrcode.getCameras(); // triggers the actual browser permission prompt
+        setStep('step-perm','done');
+
+        setStep('step-granted','active');
+        await sleep(250);
+        setStep('step-granted','done');
+
+        setStep('step-look','active');
+        await sleep(250);
+        if (!cameras || !cameras.length) throw new Error("No camera found on this device.");
+        setStep('step-look','done');
+
+        var rear = cameras.find(function(c){ return /back|rear|environment/i.test(c.label); }) || cameras[cameras.length-1];
+        document.getElementById('step-found-text').textContent =
+          /back|rear|environment/i.test(rear.label) ? "Rear camera found" : "Camera found";
+        setStep('step-found','active');
+        await sleep(250);
+        setStep('step-found','done');
+
+        setStep('step-init','active');
+        scanner = new Html5Qrcode("reader");
+        document.getElementById('reader').style.display = 'block';
+        await scanner.start(
+          rear.id,
+          { fps: 10, qrbox: { width: 250, height: 150 } },
+          function(decodedText){ scanner.stop().catch(function(){}); sendCode(decodedText); },
+          function(){ /* ignore per-frame scan misses */ }
+        );
+        setStep('step-init','done');
+        setStep('step-scan','active');
+
+      } catch (err){
+        stepsEl.style.display = 'none';
+        showDenied("Camera didn't start: " + err + ".");
+      } finally {
+        starting = false;
+      }
+    }
   </script>
 </body>
 </html>
